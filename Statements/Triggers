@@ -1,0 +1,44 @@
+//Trigger 1: Validación lógica 
+CREATE TRIGGER TRG_EvitarDuplicadoProducto
+ON producto
+INSTEAD OF INSERT
+AS
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM producto p
+        JOIN inserted i ON 
+            p.nombre = i.nombre AND 
+            p.marca = i.marca AND 
+            p.id_categoria = i.id_categoria
+    )
+    BEGIN
+        RAISERROR('Producto duplicado: Ya existe un producto con el mismo nombre, marca y categoría.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+    ELSE
+    BEGIN
+        INSERT INTO producto (nombre, precio, marca, stock, id_categoria, descripcion)
+        SELECT nombre, precio, marca, stock, id_categoria, descripcion
+        FROM inserted;
+    END
+END;
+
+//Trigger 2: Creación de logs al insertar una compra
+CREATE TABLE log_compras (
+    id_log INT IDENTITY(1,1) PRIMARY KEY,
+    id_compra INT,
+    cedula INT,
+    fecha_compra DATETIME,
+    fecha_log DATETIME DEFAULT GETDATE()
+);
+
+CREATE TRIGGER TRG_LogCompraInsert
+ON compra
+AFTER INSERT
+AS
+BEGIN
+    INSERT INTO log_compras (id_compra, cedula, fecha_compra)
+    SELECT id_compra, cedula, fecha FROM inserted;
+END;

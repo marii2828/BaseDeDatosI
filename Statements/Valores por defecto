@@ -1,0 +1,13 @@
+-- Crea defaults
+CREATE DEFAULT DF_FechaActual AS GETDATE();
+CREATE DEFAULT DF_EstadoPedido AS 0;
+CREATE DEFAULT DF_DescripcionProducto AS 'Sin descripción';
+CREATE DEFAULT DF_Stock AS 0;
+CREATE DEFAULT DF_MetodoPago AS 'Efectivo';
+
+-- Asocia defaults a columnas
+EXEC sp_bindefault DF_FechaActual, 'pedido.fecha';
+EXEC sp_bindefault DF_EstadoPedido, 'pedido.estado';
+EXEC sp_bindefault DF_DescripcionProducto, 'producto.descripcion';
+EXEC sp_bindefault DF_Stock, 'producto.stock';
+EXEC sp_bindefault DF_MetodoPago, 'compra_producto.metodo_pago';
