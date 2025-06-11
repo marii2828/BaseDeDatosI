@@ -1,0 +1,7 @@
+-- Índice para búsqueda por nombre y marca en producto
+CREATE NONCLUSTERED INDEX IX_Producto_Nombre_Marca
+ON producto (nombre, marca);
+
+-- Índice para búsquedas por fecha en pedido
+CREATE NONCLUSTERED INDEX IX_Pedido_Fecha
+ON pedido (fecha);
