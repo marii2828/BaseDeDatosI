@@ -1,0 +1,45 @@
+-- Auditoría: tabla de logs para modificaciones en producto
+
+IF OBJECT_ID('dbo.producto_auditoria', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.producto_auditoria
+    (
+        audit_id      INT          IDENTITY(1,1) PRIMARY KEY,
+        id_producto   INT          NOT NULL,
+        nombre        VARCHAR(200) NOT NULL,
+        stock         INT          NOT NULL,
+        audit_action  VARCHAR(10)  NOT NULL,
+        audit_user    SYSNAME      NOT NULL,
+        audit_date    DATETIME2    NOT NULL
+    );
+END
+GO
+-- Trigger de auditoría: al actualizar producto
+-- Registra estado nuevo, usuario y fecha
+
+CREATE OR ALTER TRIGGER trg_AuditProducto
+ON dbo.producto
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    INSERT INTO dbo.producto_auditoria
+    (
+        id_producto,
+        nombre,
+        stock,
+        audit_action,
+        audit_user,
+        audit_date
+    )
+    SELECT
+        i.id_producto,
+        i.nombre,
+        i.stock,
+        'UPDATE',
+        SUSER_SNAME(),
+        SYSUTCDATETIME()
+    FROM inserted i;
+END
+GO
