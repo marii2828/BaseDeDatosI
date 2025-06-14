@@ -1,0 +1,182 @@
+-- Consulta 1: Ranking de clientes por monto total
+--Esta consulta genera un listado ordenado de los clientes que realizaron compras en un año determinado, 
+--mostrando para cada uno su cédula, nombre completo, el monto total gastado, la cantidad de compras realizadas y la cantidad de meses distintos en que compró. 
+--Si no existen compras en el año indicado, devuelve un mensaje notificándolo; de lo contrario, agrupa y filtra los datos para incluir 
+--solo a quienes efectivamente registraron movimientos, y asigna un ranking según el importe acumulado, de mayor a menor.
+
+USE SistemaDeGestion;
+GO
+
+CREATE OR ALTER PROCEDURE RankingClientesPorMontoAnual
+(
+    @Anio INT
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- 1) Verificar si hay compras en el año solicitado
+    IF NOT EXISTS (
+        SELECT 1
+          FROM compra c
+         WHERE YEAR(c.fecha) = @Anio
+    )
+    BEGIN
+        SELECT 
+            'No se tienen registros de compras para el año ' 
+            + CAST(@Anio AS VARCHAR(4)) AS Mensaje;
+        RETURN;
+    END
+
+    -- 2) Construir el ranking para ese año
+    ;WITH ComprasPorCliente AS (
+        SELECT 
+            p.cedula,
+            p.nombre + ' ' + p.apellido1 + ' ' + p.apellido2 AS NombreCompleto,
+            SUM(cp.monto_pagado)                          AS MontoTotal,
+            COUNT(DISTINCT c.id_compra)                   AS NumCompras,
+            -- Meses distintos en que compró el cliente ese año
+            (SELECT COUNT(DISTINCT MONTH(c2.fecha))
+             FROM compra c2
+             WHERE c2.cedula = p.cedula
+               AND YEAR(c2.fecha) = @Anio
+            )                                             AS MesesConCompras
+        FROM persona p
+        JOIN cliente cl 
+          ON p.cedula = cl.cedula
+        JOIN compra c 
+          ON cl.cedula = c.cedula
+        JOIN compra_producto cp 
+          ON c.id_compra = cp.id_compra
+        WHERE YEAR(c.fecha) = @Anio
+        GROUP BY 
+            p.cedula, p.nombre, p.apellido1, p.apellido2
+        HAVING SUM(cp.monto_pagado) > 0  -- solo clientes con compras
+    )
+    SELECT
+        ROW_NUMBER() OVER (ORDER BY MontoTotal DESC) AS Ranking,
+        cedula                  AS Cédula,
+        NombreCompleto,
+        MontoTotal,
+        NumCompras,
+        MesesConCompras
+    FROM ComprasPorCliente
+    ORDER BY Ranking;
+END
+GO
+--Consulta 2 – Ventas mensuales por Año
+--  recibe un año y un umbral mínimo de compras por mes. Primero comprueba con EXISTS si hay ventas en ese año, 
+--luego agrupa las compras por mes, calcula cuántas hubo y cuánto se ingresó, y filtra con HAVING los meses que cumplen el mínimo. 
+--Para cada mes también extrae, vía subconsulta correlacionada, los ingresos del mismo mes del año anterior. 
+
+CREATE OR ALTER PROCEDURE ConsultarVentasMensualesAvanzado
+(
+    @Anio           INT,
+    @MinComprasMes  INT = 1
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- 1) Validación: existe al menos una compra en @Anio
+    IF NOT EXISTS (
+        SELECT 1 
+          FROM compra 
+         WHERE YEAR(fecha) = @Anio
+    )
+    BEGIN
+        SELECT 
+            'No se tienen registros de ventas para el año ' 
+            + CAST(@Anio AS VARCHAR(4)) 
+            AS Mensaje;
+        RETURN;
+    END
+
+    -- 2) Resumen mensual con HAVING y subconsulta correlacionada
+    SELECT
+        MONTH(c.fecha)                              AS Mes,
+        COUNT(DISTINCT c.id_compra)                 AS CantidadCompras,
+        SUM(cp.monto_pagado)                        AS IngresosTotales,
+        -- subconsulta correlacionada: ventas ese mes en @Anio-1
+        ISNULL((
+            SELECT SUM(cp2.monto_pagado)
+              FROM compra c2
+              JOIN compra_producto cp2 
+                ON c2.id_compra = cp2.id_compra
+             WHERE YEAR(c2.fecha) = @Anio - 1
+               AND MONTH(c2.fecha) = MONTH(c.fecha)
+        ), 0)                                       AS IngresosAnioAnterior
+    FROM compra c
+    JOIN compra_producto cp 
+      ON c.id_compra = cp.id_compra
+    WHERE YEAR(c.fecha) = @Anio
+      AND EXISTS (                             
+          
+          SELECT 1 
+            FROM compra_producto cp3
+           WHERE cp3.id_compra = c.id_compra
+      )
+    GROUP BY MONTH(c.fecha)
+    HAVING COUNT(DISTINCT c.id_compra) >= @MinComprasMes
+    ORDER BY Mes;
+END
+GO
+
+
+-- Consulta 3: Resumen de ventas por producto
+-- para cada producto que haya vendido, el número de veces vendido, los ingresos totales y su porcentaje sobre el global. 
+--Usa EXISTS para incluir solo productos con ventas y filtra con HAVING según un ingreso mínimo parametrizable. 
+--La subconsulta correlacionada al final calcula el ingreso promedio mensual de cada producto. 
+--El resultado presenta IdProducto, nombre, veces vendido, ingresos, porcentaje y promedio mensual, listo para tu capa de presentación.
+
+CREATE OR ALTER PROCEDURE ResumenVentasPorProductoAvanzado
+(
+    @MinIngresos DECIMAL(18,2) = 0
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @TotalIngresos DECIMAL(18,2);
+    SELECT @TotalIngresos = SUM(cp.monto_pagado)
+      FROM compra_producto cp;
+
+    IF @TotalIngresos IS NULL OR @TotalIngresos = 0
+    BEGIN
+        SELECT 'No hay registros de ventas.' AS Mensaje;
+        RETURN;
+    END
+
+    SELECT
+        p.id_producto                                         AS IdProducto,
+        p.nombre                                              AS NombreProducto,
+        COUNT(cp.id_producto)                                 AS VecesVendida,
+        SUM(cp.monto_pagado)                                  AS IngresosTotales,
+        CAST(SUM(cp.monto_pagado) * 100.0 / @TotalIngresos 
+             AS DECIMAL(5,2))                                 AS PorcentajeIngresos,
+        -- subconsulta correlacionada: promedio mensual de ventas para este producto
+        ISNULL((
+            SELECT AVG(Sub.VentasMensuales)
+            FROM (
+                SELECT MONTH(c2.fecha)       AS Mes,
+                       SUM(cp2.monto_pagado) AS VentasMensuales
+                  FROM compra_producto cp2
+                  JOIN compra c2 
+                    ON cp2.id_compra = c2.id_compra
+                 WHERE cp2.id_producto = p.id_producto
+                 GROUP BY MONTH(c2.fecha)
+            ) AS Sub
+        ), 0)                                                  AS IngresoPromedioMensual
+    FROM producto p
+    JOIN compra_producto cp 
+      ON p.id_producto = cp.id_producto
+    WHERE EXISTS (
+        SELECT 1 
+          FROM compra_producto cp3
+         WHERE cp3.id_producto = p.id_producto
+    )
+    GROUP BY p.id_producto, p.nombre
+    HAVING SUM(cp.monto_pagado) >= @MinIngresos
+    ORDER BY IngresosTotales DESC;
+END
+GO
