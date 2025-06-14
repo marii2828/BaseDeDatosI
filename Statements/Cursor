@@ -1,0 +1,45 @@
+-- Cursor: Total de compras por cliente
+-- Recorre cada cliente y muestra su nombre completo y el total de compras registradas
+USE SistemaDeGestion;
+GO
+
+DECLARE @Resultados TABLE (
+    NombreCliente VARCHAR(100),
+    TotalCompras  INT
+);
+
+DECLARE 
+    @cedula       INT,
+    @nombre       VARCHAR(100),
+    @totalCompras INT;
+
+DECLARE cliente_cur CURSOR FOR
+SELECT 
+    c.cedula,
+    per.nombre + ' ' + per.apellido1 + ' ' + per.apellido2
+FROM cliente c
+JOIN persona per 
+  ON c.cedula = per.cedula;
+
+OPEN cliente_cur;
+FETCH NEXT FROM cliente_cur INTO @cedula, @nombre;
+
+-- Recorre y guarda en @Resultados
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SELECT @totalCompras = COUNT(*)
+    FROM compra
+    WHERE cedula = @cedula;
+
+    INSERT INTO @Resultados (NombreCliente, TotalCompras)
+    VALUES (@nombre, @totalCompras);
+
+    FETCH NEXT FROM cliente_cur INTO @cedula, @nombre;
+END
+
+CLOSE cliente_cur;
+DEALLOCATE cliente_cur;
+
+-- Devolvemos un único result set
+SELECT * 
+FROM @Resultados;
