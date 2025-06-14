@@ -1,0 +1,4 @@
+//Índice para consultas por cedula y fecha en compras 
+CREATE NONCLUSTERED INDEX IX_Compra_Cedula_Fecha
+ON compra (cedula, fecha);
+

@@ -1,0 +1,22 @@
+--5 Tipos de datos con reglas
+-- Crear reglas
+CREATE RULE ReglaCedula AS @valor >= 10000000 AND @valor <= 99999999;
+CREATE RULE ReglaTelefono AS @valor LIKE '[0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9]';
+CREATE RULE ReglaPrecio AS @valor > 0;
+CREATE RULE ReglaStock AS @valor >= 0;
+CREATE RULE ReglaMetodoPago AS @valor IN ('Tarjeta', 'Efectivo', 'Transferencia');
+
+-- Crear tipos con sp_addtype
+EXEC sp_addtype CedulaTipo, 'INT', 'NOT NULL';
+EXEC sp_addtype TelefonoTipo, 'CHAR(9)', 'NOT NULL';
+EXEC sp_addtype PrecioTipo, 'FLOAT', 'NOT NULL';
+EXEC sp_addtype StockTipo, 'INT', 'NOT NULL';
+EXEC sp_addtype MetodoPagoTipo, 'VARCHAR(30)', 'NULL';
+
+
+-- Asociar reglas a los tipos
+EXEC sp_bindrule ReglaCedula, 'CedulaTipo';
+EXEC sp_bindrule ReglaTelefono, 'TelefonoTipo';
+EXEC sp_bindrule ReglaPrecio, 'PrecioTipo';
+EXEC sp_bindrule ReglaStock, 'StockTipo';
+EXEC sp_bindrule ReglaMetodoPago, 'MetodoPagoTipo';

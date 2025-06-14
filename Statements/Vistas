@@ -1,0 +1,39 @@
+//Vista 1: Vista de pedidos pendientes con datos del cliente
+CREATE VIEW vista_pedidos_pendientes AS
+SELECT 
+    p.id_pedido,
+    p.fecha,
+    per.nombre + ' ' + per.apellido1 AS nombre_cliente,
+    ep.estado
+FROM pedido p
+JOIN cliente c ON p.cedula = c.cedula
+JOIN persona per ON c.cedula = per.cedula
+JOIN estado_pedido ep ON p.estado = ep.id_estado_pedido
+WHERE p.estado = 0;
+
+//Vista 2: Vista de compras con detalle de productos y garantías
+CREATE VIEW vista_compras_detalle AS
+SELECT 
+    c.id_compra,
+    c.fecha,
+    cp.id_producto,
+    p.nombre AS nombre_producto,
+    cp.monto_pagado,
+    cp.metodo_pago,
+    g.fecha_fin AS garantia_valida_hasta
+FROM compra c
+JOIN compra_producto cp ON c.id_compra = cp.id_compra
+JOIN producto p ON cp.id_producto = p.id_producto
+LEFT JOIN garantia g ON cp.garantia = g.id_garantia;
+
+//Vista 3: Vista de clientes y cantidad de compras realizadas
+CREATE VIEW vista_clientes_compras AS
+SELECT 
+    per.cedula,
+    per.nombre + ' ' + per.apellido1 AS nombre_cliente,
+    COUNT(c.id_compra) AS cantidad_compras
+FROM cliente cl
+JOIN persona per ON cl.cedula = per.cedula
+LEFT JOIN compra c ON cl.cedula = c.cedula
+GROUP BY per.cedula, per.nombre, per.apellido1;
+

@@ -1,0 +1,28 @@
+//Consulta 1: Total de compras por cliente con CASE para clasificar clientes
+SELECT 
+    p.cedula,
+    p.nombre + ' ' + p.apellido1 AS nombre_cliente,
+    COUNT(c.id_compra) AS total_compras,
+    SUM(cp.monto_pagado) AS monto_total,
+    CASE 
+        WHEN SUM(cp.monto_pagado) >= 100000 THEN 'Cliente VIP'
+        WHEN SUM(cp.monto_pagado) >= 50000 THEN 'Cliente frecuente'
+        ELSE 'Cliente ocasional'
+    END AS tipo_cliente
+FROM persona p
+JOIN cliente cl ON p.cedula = cl.cedula
+JOIN compra c ON cl.cedula = c.cedula
+JOIN compra_producto cp ON c.id_compra = cp.id_compra
+GROUP BY p.cedula, p.nombre, p.apellido1;
+
+// Consulta 2: Productos más vendidos y su stock restante
+SELECT 
+    pr.id_producto,
+    pr.nombre,
+    pr.stock,
+    COUNT(cp.id_producto) AS veces_vendido,
+    SUM(cp.monto_pagado) AS total_ingresos
+FROM producto pr
+JOIN compra_producto cp ON pr.id_producto = cp.id_producto
+GROUP BY pr.id_producto, pr.nombre, pr.stock
+ORDER BY veces_vendido DESC;

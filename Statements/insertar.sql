@@ -172,9 +172,9 @@ CREATE PROCEDURE InsertarCorreoPersona
 AS
 BEGIN
     BEGIN TRY
-        IF @cedulaCorreo NOT IN (SELECT cedula FROM cliente) 
+        IF @cedulaCorreo NOT IN (SELECT cedula FROM persona) 
             BEGIN 
-                SELECT 'El cliente no existe.' AS Mensaje;
+                SELECT 'La persona no existe.' AS Mensaje;
                 RETURN;
             END
         IF @correo NOT LIKE '%_@__%.__%' 
@@ -200,6 +200,7 @@ END;
 
 EXEC InsertarCorreoPersona @cedulaCorreo = 12345678, @correo = 'juanperes@gmail.com';
 SELECT * FROM correos_personas;
+
 
 -->Procedimiento para insertar productos, verificando que el nombre y marca no esté vacío o que ya este registrado, 
 -- que el precio sea mayor a cero, que el stock no sea negativo, y que la descripción no esté vacía.
@@ -424,7 +425,6 @@ CREATE PROCEDURE InsertarPedido
 (
     @cedula INT, 
     @estado TINYINT, 
-    @detalles VARCHAR(200), 
     @fecha DATE, 
     @distrito INT, 
     @señas VARCHAR(200)
@@ -450,8 +450,8 @@ BEGIN
                 RETURN;
             END
 
-        INSERT INTO pedido(cedula, estado, detalles, fecha, distrito, señas)
-        VALUES (@cedula, @estado, @detalles, @fecha, @distrito, @señas);
+        INSERT INTO pedido(cedula, estado, fecha, distrito, señas)
+        VALUES (@cedula, @estado, @fecha, @distrito, @señas);
 
         SELECT 'Pedido insertado correctamente.' AS Mensaje;
     END TRY
@@ -462,10 +462,10 @@ BEGIN
     END CATCH
 END; 
 
+
 EXEC InsertarPedido 
     @cedula = 12345678, 
     @estado = 0, 
-    @detalles = 'Pedido de prueba', 
     @fecha = '2023-10-01', 
     @distrito = 1, 
     @señas = 'Calle Falsa 123';
