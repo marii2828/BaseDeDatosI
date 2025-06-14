@@ -1,0 +1,142 @@
+-- Transacción1: Insertar Pedido con Detalle y Actualización de Stock
+--Valida que el cliente, estado, distrito y producto existan y sean válidos.
+--Inserta una nueva fila en la tabla 'pedido' y captura su ID generado.
+--Inserta el detalle asociado en 'detalles_pedido' usando el ID del pedido.
+--Descuenta la cantidad vendida del stock en la tabla 'producto'.
+--Si todo se ejecuta sin errores, hace COMMIT; si falla algo, deshace todos los cambios con ROLLBACK.
+
+USE SistemaDeGestion;
+GO
+
+CREATE OR ALTER PROCEDURE RealizarPedidoConDetalleYStock
+(
+    @cedula        INT,
+    @estado        TINYINT,
+    @fecha         DATE,
+    @distrito      INT,
+    @señas         VARCHAR(200),
+    @id_producto   INT,
+    @cantidad      INT,
+    @observaciones VARCHAR(200)
+)
+AS
+BEGIN
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+        -- 1) Validaciones (mismo patrón de InsertarPedido) 
+        IF @cedula NOT IN (SELECT cedula FROM cliente)
+        BEGIN
+            SELECT 'El cliente no existe.' AS Mensaje;  
+            RETURN;
+        END
+
+        IF @estado NOT IN (0,1,2,3)
+        BEGIN
+            SELECT 'Estado inválido. Debe ser 0 (Pendiente), 1 (Enviado), 2 (Entregado) o 3 (Cancelado).' AS Mensaje;  
+            RETURN;
+        END
+
+        IF @distrito NOT IN (SELECT id_distrito FROM distritos)
+        BEGIN
+            SELECT 'El distrito no existe.' AS Mensaje;
+            RETURN;
+        END
+
+        -- 2) Validar producto y cantidad 
+        IF @id_producto NOT IN (SELECT id_producto FROM producto)
+        BEGIN
+            SELECT 'El producto no existe.' AS Mensaje;
+            RETURN;
+        END
+
+        IF @cantidad <= 0
+        BEGIN
+            SELECT 'La cantidad debe ser mayor que cero.' AS Mensaje;
+            RETURN;
+        END
+
+        -- 3) Insertar pedido ─ replicando InsertarPedido 
+        INSERT INTO pedido (cedula, estado, fecha, distrito, señas)
+        VALUES (@cedula, @estado, @fecha, @distrito, @señas);
+
+        DECLARE @nuevoPedido INT = SCOPE_IDENTITY();
+
+        -- 4) Insertar detalle ─ replicando InsertarDetallesPedido 
+        INSERT INTO detalles_pedido (id_pedido, cantidad, observaciones)
+        VALUES (@nuevoPedido, @cantidad, @observaciones);
+
+        -- 5) Actualizar stock
+        UPDATE producto
+           SET stock = stock - @cantidad
+         WHERE id_producto = @id_producto;
+
+        COMMIT TRANSACTION;
+        SELECT 
+            'Pedido ' + CAST(@nuevoPedido AS VARCHAR(10)) 
+            + ' con detalle y stock actualizado.' AS Mensaje;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT ERROR_MESSAGE() AS MensajeError;
+    END CATCH
+END
+GO
+
+--Transacción2: Eliminar Compra y sus Productos
+--Valida que se haya proporcionado un ID de compra y que exista en la tabla 'compra'.
+--Llama al procedimiento 'EliminarCompraProducto' para borrar todas las líneas de detalle.
+--Elimina la cabecera de la compra de la tabla 'compra'.
+--Si todas las operaciones tienen éxito, confirma con COMMIT; si ocurre algún error, revierte todo con ROLLBACK
+
+USE SistemaDeGestion;
+GO
+
+CREATE OR ALTER PROCEDURE EliminarCompraConProductos
+(
+    @idCompra INT  -- ID de la compra a eliminar
+)
+AS
+BEGIN
+    BEGIN TRY
+
+        BEGIN TRANSACTION;
+
+        -- Validación de parámetro
+        IF @idCompra IS NULL
+        BEGIN
+            SELECT 'Debe proporcionar un ID de compra.' AS Mensaje;
+            RETURN;
+        END
+
+        -- Verificar existencia de la compra
+        IF NOT EXISTS (
+            SELECT 1
+              FROM compra
+             WHERE id_compra = @idCompra
+        )
+        BEGIN
+            SELECT 'La compra especificada no existe.' AS Mensaje;
+            RETURN;
+        END
+
+        -- 1) Eliminar productos asociados
+        EXEC EliminarCompraProducto @idCompra;
+
+        -- 2) Eliminar la cabecera de la compra
+        DELETE FROM compra
+         WHERE id_compra = @idCompra;
+
+        COMMIT TRANSACTION;
+        SELECT 
+            'Compra ' + CAST(@idCompra AS VARCHAR(10)) 
+            + ' y sus productos eliminados correctamente.' 
+            AS Mensaje;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 
+            ROLLBACK TRANSACTION;
+        SELECT ERROR_MESSAGE() AS MensajeError;
+    END CATCH
+END
+GO
